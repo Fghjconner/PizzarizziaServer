@@ -1,10 +1,11 @@
-
+import java.io.IOException;
+import java.net.ServerSocket;
 
 class Server extends Thread
 {
-	private class ConnectionListenThread extends Thread
+	private class ConnectionThread extends Thread
 	{
-		public ConnectionListenThread()
+		public ConnectionThread()
 		{
 
 		}
@@ -12,7 +13,35 @@ class Server extends Thread
 		@Override
 		public void run()
 		{
+
+		}
+	}
+
+	private class ConnectionListenThread extends Thread
+	{
+		ServerSocket listenerSocket;
+
+		public ConnectionListenThread()
+		{
 			
+		}
+
+		@Override
+		public void run()
+		{
+			ServerSocket listenerSocket = new ServerSocket(53737);
+
+			while (true)
+			{
+				try
+				{
+
+				}
+				catch (IOException e)
+				{
+					e.printStackTrace();
+				}
+			}
 		}
 	}
 
