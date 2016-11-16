@@ -363,7 +363,7 @@ public class Engine
 				else
 					return new GraphicsCommunicationObject.StandElement(playerNumber, currentPlayer.loc.x, currentPlayer.loc.y, currentPlayer.held.makeGraphicsItem());
 			default:
-				return null; //TODO: Throw error?
+				return null;
 		}
 
 	}

@@ -1,6 +1,5 @@
 import java.awt.*;
 import javax.swing.*;
-import java.awt.event.MouseListener;
 import java.awt.event.*;
 import javax.imageio.ImageIO;
 import java.io.*;
@@ -22,8 +21,6 @@ class User_Interface// extends Canvas
 		// User_Interface ui = new User_Interface();
 				
 		ui.setPreferredSize( new Dimension(Width, Height));
-		// ui.setMinimumSize( new Dimension(Width, Height));
-		// ui.setMaximumSize( new Dimension(Width, Height));
 
  		// creating the main window
 		JFrame window = new JFrame(Title);
@@ -48,17 +45,10 @@ class User_Interface// extends Canvas
 
 	public static void Main_Menu(Graphics g)
 	{
-
+		// casting graphics to use 2d commands (makes rect drawing easier)
 		Graphics2D g2d = (Graphics2D) g;
-		
-		g.drawString("",0,0);
-		// title		make fancier later
-		// Font title = new Font("Serif", Font.BOLD, 30);
-		// g.setFont(title);
-		// g.drawString("Panic at the Pizzarizzia!", 15, 50); 
 
 		// image title
-
 		Image title_img = null;
 		try {	
 			title_img = ImageIO.read(new File("Title.png"));	}
@@ -102,10 +92,7 @@ class User_Interface// extends Canvas
 		Font help_text = new Font("Serif", Font.BOLD, 50);
 		g1.setFont(help_text);
 		g1.drawString("",0,0);
-		g1.drawString("Help info goes here", 400,400);
-		g1.drawString("Help info goes here", 50,50);
-
-//-------------------------------------------------------
+		g1.drawString("Help info goes here", 0,0);
 
 	}
 
