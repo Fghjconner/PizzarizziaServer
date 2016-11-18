@@ -1,309 +1,351 @@
 import java.io.IOException;
-import java.net.Socket;
-import java.net.ServerSocket;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.ArrayBlockingQueue;
-import java.util.List;
-import java.util.ArrayList;
+import java.util.Timer;
+import java.util.TimerTask;
 
-class Server extends Thread
+import javax.websocket.EncodeException;
+import javax.websocket.OnClose;
+import javax.websocket.OnMessage;
+import javax.websocket.OnOpen;
+import javax.websocket.Session;
+import javax.websocket.server.ServerEndpoint;
+
+@ServerEndpoint(value = "/game", encoders = GsonEncoder.class, configurator = ServerConfigurator.class)
+// @ServerEndpoint("/echo")
+public class Server
 {
-	int lastConnectionId = 0;
-	private List<Connection> connections;
-	private BlockingQueue<Packet> packetQueue;
+	volatile Session[] playerConnections;
+	Engine.Action[][] lastActions;
+	Engine engine;
+	volatile ServerState state;
+	Timer endOfRoundTimer;
+	static GsonDecoder decoder;
 
-	private class Connection extends Thread
+	public Server()
 	{
-		Socket clientConnection;
-		int connectionNumber;
+		decoder = new GsonDecoder(this);
+		resetServer();
+		
+		System.out.println("Made a new Server object :(");
+	}
+	
+	public void resetServer()
+	{
+		playerConnections = new Session[4];
+		lastActions = new Engine.Action[4][];
+		state = ServerState.WAITING_TO_START;
+		
+		if (endOfRoundTimer != null)
+			endOfRoundTimer.cancel();
+		endOfRoundTimer = new Timer();
+	}
 
-		public Connection(Socket connection, int conNumber)
+	@OnOpen
+	public void openHandler(Session session)
+	{
+		if (state == ServerState.WAITING_TO_START)
 		{
-			clientConnection = connection;
-			connectionNumber = conNumber;	
+			int i = 0;
+			while (i < getMaxPlayers())
+			{
+				if (playerSessionEquals(i, null))
+				{
+					sendPacketToConnection(session, new JoinResponsePacket(true));
+					setPlayer(i, session);
+					sendPacketToPlayer(i, new PlayerNumberUpdatePacket(i));
+					break;
+				}
+				i++;
+			}
+			if (i == getMaxPlayers())
+				sendPacketToConnection(session, new JoinResponsePacket(false));
+		} else
+			sendPacketToConnection(session, new JoinResponsePacket(false));
+	}
+
+	
+	@OnMessage
+	public void onMessageReceived(String in, Session session)
+	{
+		IncomingPacket input = decoder.decode(in);
+
+		for (int i = 0; i < getMaxPlayers(); i++)
+			if (playerSessionEquals(i, session))
+			{
+				input.process(session, i);
+				return;
+			}
+	}
+	
+	@OnClose
+	public void onConnectionClose(Session session)
+	{
+		for (int i = 0; i < getMaxPlayers(); i++)
+			if (playerSessionEquals(i, session))
+			{
+				setPlayer(i, null);
+			}
+		
+		for (int i = 0; i < getMaxPlayers(); i++)
+			if (!playerSessionEquals(i, null))
+				return;
+		
+		resetServer();
+	}
+
+	private synchronized int getMaxPlayers()
+	{
+		return playerConnections.length;
+	}
+
+	private synchronized boolean playerSessionEquals(int player, Session session)
+	{
+		return playerConnections[player] == session;
+	}
+
+	private synchronized void setPlayer(int player, Session session)
+	{
+		playerConnections[player] = session;
+	}
+
+	private synchronized void sendPacketToPlayer(int player, OutgoingPacket out)
+	{
+		if (!sendPacketToConnection(playerConnections[player], out))
+			playerConnections[player] = null;
+	}
+
+	private synchronized boolean sendPacketToConnection(Session session, OutgoingPacket out)
+	{
+		try
+		{
+			if (session != null)
+				session.getBasicRemote().sendObject(out);
+		} catch (IOException | EncodeException e)
+		{
+			try
+			{
+				session.close();
+			} catch (IOException e1)
+			{
+				e1.printStackTrace();
+			}
+			e.printStackTrace();
+			return false;
 		}
 
+		return true;
+	}
+
+	private void startRound()
+	{
+		state = ServerState.IN_ROUND;
+
+		endOfRoundTimer.schedule(new EndRoundTask(), 15000);
+
+		for (int i = 0; i < getMaxPlayers(); i++)
+			sendPacketToPlayer(i, new RoundStartPacket(60));
+	}
+
+	public static enum ServerState
+	{
+		WAITING_TO_START, IN_ROUND, POST_ROUND
+	}
+
+	public class EndRoundTask extends TimerTask
+	{
 		@Override
 		public void run()
 		{
-			InputStream input;
-			try
-			{
-				input = clientConnection.getInputStream();
-			} catch (IOException e)
-			{
-				e.printStackTrace();
-				return;
-			}
+			state = ServerState.POST_ROUND;
 
-
-			List<Byte> data = new ArrayList<Byte>();
-
-			try
-			{
-				byte in = (byte)input.read();
-				while(in != '\0')
-				{
-					data.add(in);
-					in = (byte)input.read();
-				}
-			} catch (IOException e)
-			{
-				e.printStackTrace();
-				return;
-			}
-
-			try
-			{
-				System.out.println("Putting packet into queue");
-				packetQueue.put(Packet.parsePacket(data.toArray(new Byte[data.size()]), connectionNumber));
-				System.out.println("Packet in queue!");
-			} catch (Exception e)
-			{
-				System.out.println("hi");
-				e.printStackTrace();
-				System.exit(1);
-			}
+			for (int i = 0; i < getMaxPlayers(); i++)
+				sendPacketToPlayer(i, new RoundEndPacket());
 		}
 	}
 
-	private class ConnectionListenThread extends Thread
-	{
-		ServerSocket listenerSocket;
-
-		public ConnectionListenThread()
-		{
-			try
-			{
-				listenerSocket = new ServerSocket(53737);
-			}
-			catch (IOException e)
-			{
-				e.printStackTrace();
-				//TODO: real error handling
-			}
-		}
-
-		@Override
-		public void run()
-		{
-			while (true)
-			{
-				try
-				{
-					Socket connectionSocket = listenerSocket.accept();
-
-					Connection cThread = new Connection(connectionSocket, lastConnectionId++);
-					cThread.start();
-
-					connections.add(cThread);
-				}
-				catch (IOException e)
-				{
-					e.printStackTrace();
-					//TODO: real error handling
-				}
-			}
-		}
-	}
-
-
-
-
-	public static abstract class Packet
+	public static abstract class IncomingPacket
 	{
 		public enum PacketType
 		{
-			NULL, JOIN_REQUEST, UPDATE_PLAYER_ACTION, END_OF_ROUND_ACTIONS, START_GAME,
-			JOIN_RESPONSE;
-
-			public static final PacketType values[] = values();
-		}
-
-		public static Packet parsePacket(Byte[] data, int connectionNumber) throws Exception
-		{
-			if (data.length < 1)
-				throw new Exception("Packet has no length");
-			if (data[0] < 0 || data[0] > PacketType.values.length)
-				throw new Exception("Unknown packet: " + data[0]);
-
-			byte[] primitiveData = new byte[data.length];
-			for (int i = 0; i < data.length; i++)
-				primitiveData[i] = data[i];
-
-			PacketType type = PacketType.values[data[0]];
-
-			switch(type)
-			{
-				case JOIN_REQUEST: return new JoinRequestPacket(primitiveData, connectionNumber);
-				case UPDATE_PLAYER_ACTION: return new UpdatePlayerActionPacket(primitiveData, connectionNumber);
-				case END_OF_ROUND_ACTIONS: return new EndOfRoundActionsPacket(primitiveData, connectionNumber);
-				// case START_GAME: return new StartGamePacket(primitiveData, connectionNumber);
-				default: throw new Exception("Unkown packet: " + data[0]);
-			}
-		}
-
-		public static void sendPacket(Packet p, OutputStream out)
-		{
-			byte[] data = p.getBytes();
-
-			try
-			{
-				out.write(data);
-			} catch (IOException e)
-			{
-				e.printStackTrace();
-				return;
-			}
+			UPDATE_PLAYER_ACTION, END_OF_ROUND_ACTIONS, START_GAME;
 		}
 
 		public PacketType type;
-		public int connectionNumber;
 
-		public Packet(PacketType t, int conNumber)
+		public IncomingPacket(PacketType t)
 		{
 			type = t;
-			connectionNumber = conNumber;
 		}
 
-		public abstract byte[] getBytes();
+		public abstract void process(Session session, int sourcePlayer);
 	}
 
-	public static class JoinRequestPacket extends Packet
-	{
-		public JoinRequestPacket()
-		{
-			super(PacketType.JOIN_REQUEST, -1);
-		}
-
-		public JoinRequestPacket(byte[] data, int connectionNumber)
-		{
-			super(PacketType.JOIN_REQUEST, connectionNumber);
-		}
-
-		public byte[] getBytes()
-		{
-			return new byte[]{};
-		}
-	}
-
-	//Update packet sent to the server whenever the user changes an action.  Allows all other clients to display current action choices.
-	public static class UpdatePlayerActionPacket extends Packet
-	{
-		public byte[] actions;
-
-		public UpdatePlayerActionPacket(byte[] data, int connectionNumber) throws Exception
-		{
-			super(PacketType.UPDATE_PLAYER_ACTION, connectionNumber);
-
-			if (data.length != 9)
-				throw new Exception("Recieved malformed UPDATE_PLAYER_ACTION packet");
-
-			actions = new byte[8];
-
-			System.arraycopy(data, 1, actions, 0, 8);
-		}
-
-		public byte[] getBytes()
-		{
-			return new byte[]{};
-		}
-	}
-
-	//Packet sent by client at end of round with finalized actions.  Ensures synchronization between clients and server
-	public static class EndOfRoundActionsPacket extends Packet
+	// Update packet sent to the server whenever the user changes an action.
+	// Allows all other clients to display current action choices.
+	public class UpdatePlayerActionPacket extends IncomingPacket
 	{
 		public Engine.Action[] actions;
 
-		public EndOfRoundActionsPacket(byte[] data, int connectionNumber) throws Exception
+		public UpdatePlayerActionPacket(Engine.Action[] acts)
 		{
-			super(PacketType.END_OF_ROUND_ACTIONS, connectionNumber);
-			//TODO: process data
-			//NOTE: Need way to determine player number of packets
+			super(PacketType.UPDATE_PLAYER_ACTION);
+			
+			actions = acts;
 		}
 
-		public byte[] getBytes()
+		@Override
+		public void process(Session session, int sourcePlayer)
 		{
-			return new byte[]{};
+			if (state == ServerState.IN_ROUND)
+				for (int i = 0; i < getMaxPlayers(); i++)
+				{
+					sendPacketToPlayer(i, new SharePlayerActionPacket(this, sourcePlayer));
+				}
 		}
 	}
 
+	// Packet sent by client at end of round with finalized actions. Ensures
+	// synchronization between clients and server
+	public class EndOfRoundActionsPacket extends IncomingPacket
+	{
+		public Engine.Action[] actions;
 
+		public EndOfRoundActionsPacket(Engine.Action[] acts)
+		{
+			super(PacketType.END_OF_ROUND_ACTIONS);
+			
+			actions = acts;
+		}
 
+		@Override
+		public void process(Session session, int sourcePlayer)
+		{
+//			System.out.println("Got end of round packet");
+			if (state == ServerState.POST_ROUND)
+			{
+//				System.out.println("Processing end of round packet");
+				lastActions[sourcePlayer] = new Engine.Action[4];
 
+				for (int i = 0; i < 4; i++)
+					lastActions[sourcePlayer][i] = actions[i];
 
+				for (int i = 0; i < 4; i++)
+					if (!playerSessionEquals(i, null) && lastActions[i] == null)
+						return;
 
+				GraphicsCommunicationObject gco = engine.performTurn(lastActions);
+				for (int i = 0; i < 4; i++)
+				{
+					sendPacketToPlayer(i, gco);
+				}
 
-	public static class JoinResponsePacket extends Packet
+				startRound();
+			}
+		}
+	}
+
+	public class StartGamePacket extends IncomingPacket
+	{
+		public StartGamePacket()
+		{
+			super(PacketType.START_GAME);
+		}
+
+		@Override
+		public void process(Session session, int sourcePlayer)
+		{
+			if (state == ServerState.WAITING_TO_START && sourcePlayer == 0)
+			{
+				int playerCount = 0;
+				for (int i = 0; i < getMaxPlayers(); i++)					
+					if (!playerSessionEquals(i, null))
+						playerCount++;
+
+				engine = new Engine(playerCount);
+				
+				GraphicsCommunicationObject packet = engine.getStanding();
+				
+				for (int i = 0; i < getMaxPlayers(); i++)
+					sendPacketToPlayer(i, packet);
+
+				startRound();
+			}
+		}
+
+	}
+
+	public static abstract class OutgoingPacket
+	{
+		public enum PacketType
+		{
+			JOIN_RESPONSE, SHARE_PLAYER_ACTION, ROUND_START, ROUND_END, PLAYER_NUMBER_UPDATE, GRAPHICS
+		}
+
+		public PacketType type;
+
+		public OutgoingPacket(PacketType t)
+		{
+			type = t;
+		}
+	}
+
+	public class JoinResponsePacket extends OutgoingPacket
 	{
 		public boolean response;
 
 		public JoinResponsePacket(boolean r)
 		{
-			super(PacketType.JOIN_RESPONSE, -1);
+			super(PacketType.JOIN_RESPONSE);
 
 			response = r;
 		}
-
-		public JoinResponsePacket(byte[] data, int connectionNumber) throws Exception
-		{
-			super(PacketType.JOIN_RESPONSE, connectionNumber);
-
-			if (data.length != 2)
-				throw new Exception("Recieved malformed JOIN_RESPONSE packet");
-
-			type = PacketType.JOIN_RESPONSE;
-			response = (data[0] == 0 ? false : true);
-		}
-
-		public byte[] getBytes()
-		{
-			return new byte[]{(byte)type.ordinal(), (byte)(response?1:0)};
-		}
 	}
 
-
-
-
-	int playerCount;
-
-	public Server()
+	public class SharePlayerActionPacket extends OutgoingPacket
 	{
-		packetQueue = new ArrayBlockingQueue<Packet>(1024);
-		connections = new ArrayList<Connection>();
-	}
+		public Engine.Action[] actions;
+		int player;
 
-	@Override
-	public void run()
-	{
-		ConnectionListenThread listenThread = new ConnectionListenThread();
-		listenThread.start();
-
-		System.out.println("Starting server...");
-		while(true)
+		public SharePlayerActionPacket(UpdatePlayerActionPacket otherPacket, int playerNumber)
 		{
-			try
-			{
-				System.out.println(packetQueue.take());
-			} catch (InterruptedException e)
-			{
-				e.printStackTrace();
-				return;
-			}
+			super(PacketType.SHARE_PLAYER_ACTION);
+
+			player = playerNumber;
+			
+			actions = new Engine.Action[4];
+			for (int i = 0; i < 4; i++)
+				actions[i] = otherPacket.actions[i];
 		}
 	}
 
-
-
-
-
-
-
-	public static void main(String[] args)
+	public class RoundStartPacket extends OutgoingPacket
 	{
-		Server test = new Server();
-		test.run();
+		public int duration;
+
+		public RoundStartPacket(int dur)
+		{
+			super(PacketType.ROUND_START);
+
+			duration = dur;
+		}
+	}
+
+	public class PlayerNumberUpdatePacket extends OutgoingPacket
+	{
+		int playerNumber;
+
+		public PlayerNumberUpdatePacket(int pNum)
+		{
+			super(PacketType.PLAYER_NUMBER_UPDATE);
+
+			playerNumber = pNum;
+		}
+	}
+
+	public class RoundEndPacket extends OutgoingPacket
+	{
+		public RoundEndPacket()
+		{
+			super(PacketType.ROUND_END);
+		}
 	}
 }

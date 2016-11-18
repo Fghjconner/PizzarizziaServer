@@ -1,8 +1,24 @@
-import java.util.ArrayList;
-import java.util.List;
+import com.google.gson.Gson;
+
+
 
 public class Engine
 {
+	public static void main(String[] args)
+	{
+		Gson gson = new Gson();
+		Engine engine = new Engine(1);
+		
+		Action[] actions = new Action[4];
+		actions[0] = engine.new Action(ActionType.MOVE, Direction.LEFT);
+		actions[1] = engine.new Action(ActionType.MOVE, Direction.RIGHT);
+		actions[2] = engine.new Action(ActionType.MOVE, Direction.LEFT);
+		actions[3] = engine.new Action(ActionType.MOVE, Direction.RIGHT);
+		
+		System.out.println(gson.toJson(actions));
+	}
+	
+	
 	public enum ActionType
 	{
 		USE, MOVE, THROW, STAND
@@ -38,7 +54,7 @@ public class Engine
 	}
 
 
-	private class Location
+	private static class Location
 	{
 		public int x;
 		public int y;
@@ -63,8 +79,9 @@ public class Engine
 			{
 				case RIGHT: adjacentLoc.x++; break;
 				case LEFT: adjacentLoc.x--; break;
-				case UP: adjacentLoc.y++; break;
-				case DOWN: adjacentLoc.y--; break;
+				case UP: adjacentLoc.y--; break;
+				case DOWN: adjacentLoc.y++; break;
+				case NONE: break;
 			}
 
 			return adjacentLoc;
@@ -81,6 +98,19 @@ public class Engine
 	{
 		public Item held = null;
 		public Location loc;
+		
+		public Player(Location startingLoc)
+		{
+			loc = startingLoc;
+		}
+		
+		public GraphicsCommunicationObject.Item makeHeldGraphicsItem()
+		{
+			if (held == null)
+				return null;
+			else
+				return makeHeldGraphicsItem();
+		}
 	}
 
 	private enum Tile
@@ -156,15 +186,27 @@ public class Engine
 		{Tile.WALL,		Tile.WALL,		Tile.WALL,		Tile.PICKUP,	Tile.PICKUP,	Tile.PICKUP,	Tile.PICKUP},		//9
 	};
 
-	private Item[][] items = new Item[7][9];
+	private Item[][] items = new Item[9][7];
 
+	private static final Location[] startingLocations = {new Location(4, 2), new Location(2, 5), new Location(5, 3), new Location(3, 6)};
 	private Player[] players;
 
 	public Engine(int playerCount)
 	{
 		players = new Player[playerCount];
 		for (int i = 0; i < playerCount; i++)
-			players[i] = new Player();
+			players[i] = new Player(startingLocations[i]);
+	}
+	
+	public GraphicsCommunicationObject getStanding()
+	{
+		GraphicsCommunicationObject graphics = new GraphicsCommunicationObject();
+		
+		for (int playerNumber = 0; playerNumber < players.length; playerNumber++)
+			for (int step = 0; step < 4; step++)
+				graphics.add(step, new GraphicsCommunicationObject.StandElement(playerNumber, players[playerNumber].loc.x, players[playerNumber].loc.y, players[playerNumber].makeHeldGraphicsItem()));
+		
+		return graphics;
 	}
 
 	public GraphicsCommunicationObject performTurn(Action[][] actions)
@@ -181,7 +223,7 @@ public class Engine
 			updateWorld(currentStep, actions, graphics);
 		}
 
-		return null;
+		return graphics;
 	}
 
 	private GraphicsCommunicationObject.GraphicsElement performAction(int currentStep, int playerNumber, Action[][] actions)
@@ -189,6 +231,13 @@ public class Engine
 		Action currentAction = actions[playerNumber][currentStep];
 		Player currentPlayer = players[playerNumber];
 		Location targetLoc = players[playerNumber].loc.getAdjacent(currentAction.direction);
+		
+		if (!isValidLocation(targetLoc))
+		{
+			System.out.println(targetLoc.x);
+			System.out.println(targetLoc.y);
+			return new GraphicsCommunicationObject.StandElement(playerNumber,  currentPlayer.loc.x, currentPlayer.loc.y, currentPlayer.makeHeldGraphicsItem());
+		}
 
 		switch (currentAction.type)
 		{
@@ -200,7 +249,7 @@ public class Engine
 						currentPlayer.held = getItem(targetLoc);
 						setItem(targetLoc, null);
 
-						return new GraphicsCommunicationObject.PickUpElement(playerNumber, currentPlayer.loc.x, currentPlayer.loc.y, currentAction.direction, currentPlayer.held.makeGraphicsItem());
+						return new GraphicsCommunicationObject.PickUpElement(playerNumber, currentPlayer.loc.x, currentPlayer.loc.y, currentAction.direction, currentPlayer.makeHeldGraphicsItem());
 					}
 					else
 					{
@@ -209,10 +258,10 @@ public class Engine
 							case DOUGH: currentPlayer.held = new Pizza(); break;
 							case MEAT: currentPlayer.held = new Meat(); break;
 							case VEGETABLES: currentPlayer.held = new Vegetables(); break;
-							default: return new GraphicsCommunicationObject.StandElement(playerNumber, currentPlayer.loc.x, currentPlayer.loc.y, currentPlayer.held.makeGraphicsItem());
+							default: return new GraphicsCommunicationObject.StandElement(playerNumber, currentPlayer.loc.x, currentPlayer.loc.y, currentPlayer.makeHeldGraphicsItem());
 						}
 						
-						return new GraphicsCommunicationObject.UseElement(playerNumber, currentPlayer.loc.x, currentPlayer.loc.y, currentAction.direction, currentPlayer.held.makeGraphicsItem());
+						return new GraphicsCommunicationObject.UseElement(playerNumber, currentPlayer.loc.x, currentPlayer.loc.y, currentAction.direction, currentPlayer.makeHeldGraphicsItem());
 					}
 				}
 				else if (currentPlayer.held instanceof Pizza)
@@ -228,10 +277,10 @@ public class Engine
 						else if (targetItem instanceof Vegetables && !heldPizza.vegetables && heldPizza.isRaw())
 							heldPizza.vegetables = true;
 						else
-							return new GraphicsCommunicationObject.StandElement(playerNumber, currentPlayer.loc.x, currentPlayer.loc.y, currentPlayer.held.makeGraphicsItem());
+							return new GraphicsCommunicationObject.StandElement(playerNumber, currentPlayer.loc.x, currentPlayer.loc.y, currentPlayer.makeHeldGraphicsItem());
 
 						setItem(targetLoc, null);
-						return new GraphicsCommunicationObject.PickUpElement(playerNumber, currentPlayer.loc.x, currentPlayer.loc.y, currentAction.direction, currentPlayer.held.makeGraphicsItem());
+						return new GraphicsCommunicationObject.PickUpElement(playerNumber, currentPlayer.loc.x, currentPlayer.loc.y, currentAction.direction, currentPlayer.makeHeldGraphicsItem());
 					}
 					else
 					{
@@ -253,9 +302,9 @@ public class Engine
 							return new GraphicsCommunicationObject.DropElement(playerNumber, currentPlayer.loc.x, currentPlayer.loc.y, currentAction.direction);
 						}
 						else
-							return new GraphicsCommunicationObject.StandElement(playerNumber, currentPlayer.loc.x, currentPlayer.loc.y, currentPlayer.held.makeGraphicsItem());
+							return new GraphicsCommunicationObject.StandElement(playerNumber, currentPlayer.loc.x, currentPlayer.loc.y, currentPlayer.makeHeldGraphicsItem());
 
-						return new GraphicsCommunicationObject.UseElement(playerNumber, currentPlayer.loc.x, currentPlayer.loc.y, currentAction.direction, currentPlayer.held.makeGraphicsItem());
+						return new GraphicsCommunicationObject.UseElement(playerNumber, currentPlayer.loc.x, currentPlayer.loc.y, currentAction.direction, currentPlayer.makeHeldGraphicsItem());
 					}
 				}
 				else if (currentPlayer.held instanceof Meat)
@@ -274,7 +323,7 @@ public class Engine
 							return new GraphicsCommunicationObject.DropElement(playerNumber, currentPlayer.loc.x, currentPlayer.loc.y, currentAction.direction);
 						}
 						else
-							return new GraphicsCommunicationObject.StandElement(playerNumber, currentPlayer.loc.x, currentPlayer.loc.y, currentPlayer.held.makeGraphicsItem());
+							return new GraphicsCommunicationObject.StandElement(playerNumber, currentPlayer.loc.x, currentPlayer.loc.y, currentPlayer.makeHeldGraphicsItem());
 					}
 					else
 					{
@@ -290,7 +339,7 @@ public class Engine
 							return new GraphicsCommunicationObject.DropElement(playerNumber, currentPlayer.loc.x, currentPlayer.loc.y, currentAction.direction);
 						}
 						else
-							return new GraphicsCommunicationObject.StandElement(playerNumber, currentPlayer.loc.x, currentPlayer.loc.y, currentPlayer.held.makeGraphicsItem());
+							return new GraphicsCommunicationObject.StandElement(playerNumber, currentPlayer.loc.x, currentPlayer.loc.y, currentPlayer.makeHeldGraphicsItem());
 					}
 				}
 				else if (currentPlayer.held instanceof Vegetables)
@@ -309,7 +358,7 @@ public class Engine
 							return new GraphicsCommunicationObject.DropElement(playerNumber, currentPlayer.loc.x, currentPlayer.loc.y, currentAction.direction);
 						}
 						else
-							return new GraphicsCommunicationObject.StandElement(playerNumber, currentPlayer.loc.x, currentPlayer.loc.y, currentPlayer.held.makeGraphicsItem());
+							return new GraphicsCommunicationObject.StandElement(playerNumber, currentPlayer.loc.x, currentPlayer.loc.y, currentPlayer.makeHeldGraphicsItem());
 					}
 					else
 					{
@@ -325,7 +374,7 @@ public class Engine
 							return new GraphicsCommunicationObject.DropElement(playerNumber, currentPlayer.loc.x, currentPlayer.loc.y, currentAction.direction);
 						}
 						else
-							return new GraphicsCommunicationObject.StandElement(playerNumber, currentPlayer.loc.x, currentPlayer.loc.y, currentPlayer.held.makeGraphicsItem());
+							return new GraphicsCommunicationObject.StandElement(playerNumber, currentPlayer.loc.x, currentPlayer.loc.y, currentPlayer.makeHeldGraphicsItem());
 					}
 				}
 				else
@@ -333,7 +382,7 @@ public class Engine
 			case MOVE:
 				if (getTile(targetLoc) == Tile.EMPTY)
 				{
-					GraphicsCommunicationObject.MoveElement graphicsElement = new GraphicsCommunicationObject.MoveElement(playerNumber, currentPlayer.loc.x, currentPlayer.loc.y, currentAction.direction, currentPlayer.held.makeGraphicsItem());
+					GraphicsCommunicationObject.MoveElement graphicsElement = new GraphicsCommunicationObject.MoveElement(playerNumber, currentPlayer.loc.x, currentPlayer.loc.y, currentAction.direction, currentPlayer.makeHeldGraphicsItem());
 
 					if (getItem(targetLoc) != null)
 					{
@@ -349,7 +398,7 @@ public class Engine
 				{
 					stunPlayer(playerNumber, currentStep, actions);
 
-					return new GraphicsCommunicationObject.CollideElement(playerNumber, currentPlayer.loc.x, currentPlayer.loc.y, currentAction.direction, currentPlayer.held.makeGraphicsItem());
+					return new GraphicsCommunicationObject.CollideElement(playerNumber, currentPlayer.loc.x, currentPlayer.loc.y, currentAction.direction, currentPlayer.makeHeldGraphicsItem());
 				}
 			case THROW:
 				if (currentPlayer.held instanceof Pizza && isValidLocation(targetLoc) && (getTile(targetLoc) == Tile.EMPTY || getTile(targetLoc) == Tile.COUNTER))
@@ -361,7 +410,9 @@ public class Engine
 					return new GraphicsCommunicationObject.ThrowElement(playerNumber, currentPlayer.loc.x, currentPlayer.loc.y, currentAction.direction);
 				}
 				else
-					return new GraphicsCommunicationObject.StandElement(playerNumber, currentPlayer.loc.x, currentPlayer.loc.y, currentPlayer.held.makeGraphicsItem());
+					return new GraphicsCommunicationObject.StandElement(playerNumber, currentPlayer.loc.x, currentPlayer.loc.y, currentPlayer.makeHeldGraphicsItem());
+			case STAND:
+				return new GraphicsCommunicationObject.StandElement(playerNumber,  currentPlayer.loc.x, currentPlayer.loc.y, currentPlayer.makeHeldGraphicsItem());
 			default:
 				return null;
 		}
@@ -373,8 +424,8 @@ public class Engine
 	{
 		while (handleCollision(currentStep, actions[currentStep], graphics));
 
-		for (int x = 0; x < map.length; x++)
-			for (int y = 0; y < map[0].length; y++)
+		for (int y = 0; y < map.length; y++)
+			for (int x = 0; x < map[0].length; x++)
 			{
 				Location currentLoc = new Location(x, y);
 
@@ -439,12 +490,13 @@ public class Engine
 	{
 		if (currentStep < 3)
 		{
-			if (actions[currentStep][playerNumber].type != ActionType.STAND)
+			System.out.println(playerNumber);
+			if (actions[playerNumber][currentStep].type != ActionType.STAND)
 			{
 				for (int step = 3; step > currentStep + 1; step--)
-					actions[step][playerNumber] = actions[step-1][playerNumber];
+					actions[playerNumber][step] = actions[playerNumber][step-1];
 
-				actions[currentStep+1][playerNumber] = new Action(ActionType.STAND, Direction.NONE);
+				actions[playerNumber][currentStep+1] = new Action(ActionType.STAND, Direction.NONE);
 			}
 		}
 	}
@@ -479,23 +531,21 @@ public class Engine
 
 	private Tile getTile(Location loc)
 	{
-		return map[loc.x][loc.y];
+		return map[loc.y][loc.x];
 	}
 
 	private Item getItem(Location loc)
 	{
-		return items[loc.x][loc.y];
+		return items[loc.y][loc.x];
 	}
 
 	private void setItem(Location loc, Item item)
 	{
-		items[loc.x][loc.y] = item;
+		items[loc.y][loc.x] = item;
 	}
 
 	private int getPlayerAt(Location loc)
 	{
-		List<Player> out = new ArrayList<Player>();
-
 		for (int i = 0; i < players.length; i++)
 			if (players[i].loc.equals(loc))
 				return i;
@@ -504,6 +554,6 @@ public class Engine
 
 	private boolean isValidLocation(Location loc)
 	{
-		return loc.x < 0 || loc.y < 0 || loc.x >= map.length || loc.y >= map[0].length;
+		return !(loc.x < 0 || loc.y < 0 || loc.y >= map.length || loc.x >= map[0].length);
 	}
 }

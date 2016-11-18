@@ -1,87 +1,83 @@
 import com.google.gson.*;
 import com.google.gson.reflect.*;
-import com.google.gson.stream.*;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.HashMap;
-import java.util.Map;
-import java.io.IOException;
 
-public class GraphicsCommunicationObject
+public class GraphicsCommunicationObject extends Server.OutgoingPacket
 {
-	private class GraphicsElementGsonAdapter extends TypeAdapter<GraphicsElement>
-	{
-		private final Map<String, Type> types;
-
-		public GraphicsElementGsonAdapter()
-		{
-			types = new HashMap<String, Type>();
-
-			types.put("stand", StandElement.class);
-			types.put("move", MoveElement.class);
-			types.put("collide", CollideElement.class);
-			types.put("throw", ThrowElement.class);
-			types.put("drop", DropElement.class);
-			types.put("pick up", PickUpElement.class);
-			types.put("use", UseElement.class);
-			types.put("catch", CatchElement.class);
-			types.put("fly", FlyElement.class);
-			types.put("sit", SitElement.class);
-		}
-
-		@Override
-		public GraphicsElement read(JsonReader reader) throws IOException
-		{
-			JsonParser parser = new JsonParser();
-
-			JsonElement object = parser.parse(reader);
-
-			String typeName = object.getAsJsonObject().get("type").getAsString();
-
-
-			return getGsonObject().fromJson(object, types.get(typeName));
-		}
-
-		@Override
-		public void write(JsonWriter writer, GraphicsElement value) throws IOException
-		{
-			new Gson().toJson(value, value.getClass(), writer);
-		}
-	}
-
-	private class ItemGsonAdapter extends TypeAdapter<Item>
-	{
-		private final Map<String, Type> types;
-
-		public ItemGsonAdapter()
-		{
-			types = new HashMap<String, Type>();
-
-			types.put("pizza", Pizza.class);
-			types.put("meat", Meat.class);
-			types.put("vegetables", Vegetables.class);
-		}
-
-		@Override
-		public Item read(JsonReader reader) throws IOException
-		{
-			JsonParser parser = new JsonParser();
-
-			JsonElement object = parser.parse(reader);
-
-			String typeName = object.getAsJsonObject().get("type").getAsString();
-
-
-			return getGsonObject().fromJson(object, types.get(typeName));
-		}
-
-		@Override
-		public void write(JsonWriter writer, Item value) throws IOException
-		{
-			new Gson().toJson(value, value.getClass(), writer);
-		}
-	}
+//	private class GraphicsElementGsonAdapter extends TypeAdapter<GraphicsElement>
+//	{
+//		private final Map<String, Type> types;
+//
+//		public GraphicsElementGsonAdapter()
+//		{
+//			types = new HashMap<String, Type>();
+//
+//			types.put("stand", StandElement.class);
+//			types.put("move", MoveElement.class);
+//			types.put("collide", CollideElement.class);
+//			types.put("throw", ThrowElement.class);
+//			types.put("drop", DropElement.class);
+//			types.put("pick up", PickUpElement.class);
+//			types.put("use", UseElement.class);
+//			types.put("catch", CatchElement.class);
+//			types.put("fly", FlyElement.class);
+//			types.put("sit", SitElement.class);
+//		}
+//
+//		@Override
+//		public GraphicsElement read(JsonReader reader) throws IOException
+//		{
+//			JsonParser parser = new JsonParser();
+//
+//			JsonElement object = parser.parse(reader);
+//
+//			String typeName = object.getAsJsonObject().get("type").getAsString();
+//
+//
+//			return getGsonObject().fromJson(object, types.get(typeName));
+//		}
+//
+//		@Override
+//		public void write(JsonWriter writer, GraphicsElement value) throws IOException
+//		{
+//			new Gson().toJson(value, value.getClass(), writer);
+//		}
+//	}
+//
+//	private class ItemGsonAdapter extends TypeAdapter<Item>
+//	{
+//		private final Map<String, Type> types;
+//
+//		public ItemGsonAdapter()
+//		{
+//			types = new HashMap<String, Type>();
+//
+//			types.put("pizza", Pizza.class);
+//			types.put("meat", Meat.class);
+//			types.put("vegetables", Vegetables.class);
+//		}
+//
+//		@Override
+//		public Item read(JsonReader reader) throws IOException
+//		{
+//			JsonParser parser = new JsonParser();
+//
+//			JsonElement object = parser.parse(reader);
+//
+//			String typeName = object.getAsJsonObject().get("type").getAsString();
+//
+//
+//			return getGsonObject().fromJson(object, types.get(typeName));
+//		}
+//
+//		@Override
+//		public void write(JsonWriter writer, Item value) throws IOException
+//		{
+//			new Gson().toJson(value, value.getClass(), writer);
+//		}
+//	}
 
 
 
@@ -288,34 +284,18 @@ public class GraphicsCommunicationObject
 
 
 	public List<List<GraphicsElement>> data;
-	private GsonBuilder builder;
+	private static GsonBuilder builder = new GsonBuilder()
+//		.setPrettyPrinting()
+		.serializeNulls();
 
 	private Gson getGsonObject()
 	{
 		return builder.create();
 	}
 
-
-	public static void main(String[] args)
-	{
-		GraphicsCommunicationObject test = new GraphicsCommunicationObject();
-
-		test.data.get(0).add(new MoveElement(1, 3, 4, Engine.Direction.RIGHT, null));
-		test.data.get(0).add(new MoveElement(2, 5, 6, Engine.Direction.LEFT, new Meat()));
-
-		String json = test.toJson();
-		System.out.println(json);
-
-		System.out.println(new GraphicsCommunicationObject(json).toJson());
-	}
-
 	public GraphicsCommunicationObject()
 	{
-		builder = new GsonBuilder()
-			.registerTypeAdapter(GraphicsElement.class, new GraphicsElementGsonAdapter().nullSafe())
-			.registerTypeAdapter(Item.class, new ItemGsonAdapter().nullSafe())
-			// .setPrettyPrinting()
-			.serializeNulls();
+		super(PacketType.GRAPHICS);
 
 		data = new ArrayList<List<GraphicsElement>>();
 		for (int i = 0; i < 4; i++)
