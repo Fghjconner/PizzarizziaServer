@@ -1,3 +1,7 @@
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Random;
+
 import com.google.gson.Gson;
 
 
@@ -118,12 +122,12 @@ public class Engine
 		EMPTY, WALL, OVEN, COUNTER, MEAT, VEGETABLES, CHEESE, SAUCE, CHEESAUCE, TRASH, DOUGH, PICKUP
 	}
 
-	public abstract class Item
+	public static abstract class Item
 	{
 		abstract GraphicsCommunicationObject.Item makeGraphicsItem();
 	}
 
-	public class Pizza extends Item
+	public static class Pizza extends Item
 	{
 		public Direction flightDirection = Direction.NONE;
 
@@ -133,6 +137,28 @@ public class Engine
 		public boolean vegetables = false;
 
 		public int cookedness = 0;
+		
+		public static Random rand = new Random();
+		
+		public static Pizza randomPizza()
+		{
+			Pizza out = new Pizza();
+			
+			out.sauce = rand.nextBoolean();
+			out.cheese = rand.nextBoolean();
+			out.meat = rand.nextBoolean();
+			out.vegetables = rand.nextBoolean();
+			
+			float cookedness = rand.nextFloat();
+			if (cookedness < .05)
+				out.cookedness = 0;
+			else if (cookedness < .95)
+				out.cookedness = 4;
+			else
+				out.cookedness = 8;
+			
+			return out;
+		}
 
 		public boolean isRaw()
 		{
@@ -153,9 +179,22 @@ public class Engine
 		{
 			return new GraphicsCommunicationObject.Pizza(this);
 		}
+		
+		@Override
+		public boolean equals(Object o)
+		{
+			if (o instanceof Pizza)
+			{
+				Pizza op = (Pizza) o;
+				
+				return flightDirection == op.flightDirection && sauce == op.sauce && cheese == op.cheese && meat == op.meat && vegetables == op.vegetables;
+			}
+			else
+				return false;
+		}
 	}
 
-	public class Meat extends Item
+	public static class Meat extends Item
 	{
 		public GraphicsCommunicationObject.Item makeGraphicsItem()
 		{
@@ -163,7 +202,7 @@ public class Engine
 		}
 	}
 
-	public class Vegetables extends Item
+	public static class Vegetables extends Item
 	{
 		public GraphicsCommunicationObject.Item makeGraphicsItem()
 		{
@@ -187,15 +226,19 @@ public class Engine
 	};
 
 	private Item[][] items = new Item[9][7];
+	private List<Pizza> orders;
+	private Player[] players;
+	private int stepCount = 0;
 
 	private static final Location[] startingLocations = {new Location(4, 2), new Location(2, 5), new Location(5, 3), new Location(3, 6)};
-	private Player[] players;
 
 	public Engine(int playerCount)
 	{
 		players = new Player[playerCount];
 		for (int i = 0; i < playerCount; i++)
 			players[i] = new Player(startingLocations[i]);
+		
+		orders = new ArrayList<Pizza>();
 	}
 	
 	public GraphicsCommunicationObject getStanding()
@@ -221,6 +264,12 @@ public class Engine
 			}
 
 			updateWorld(currentStep, actions, graphics);
+
+			for (Pizza p:orders)
+			{
+				graphics.add(currentStep, new GraphicsCommunicationObject.OrderElement(p));
+			}
+			stepCount++;
 		}
 
 		return graphics;
@@ -474,16 +523,31 @@ public class Engine
 						}
 						else
 						{
-							if (getTile(currentLoc) == Tile.OVEN)
-								currentPizza.cookedness++;
-
-							graphics.add(currentStep, new GraphicsCommunicationObject.SitElement(currentLoc.x, currentLoc.x, currentItem.makeGraphicsItem()));
+							if (getTile(currentLoc) == Tile.PICKUP  && orders.contains(currentPizza))
+							{
+								orders.remove(currentPizza);
+								setItem(currentLoc, null);
+							}
+							else
+							{
+								if (getTile(currentLoc) == Tile.OVEN)
+								{
+									currentPizza.cookedness++;
+								}
+	
+								graphics.add(currentStep, new GraphicsCommunicationObject.SitElement(currentLoc.x, currentLoc.x, currentItem.makeGraphicsItem()));
+							}
 						}
 					}
 					else
 						graphics.add(currentStep, new GraphicsCommunicationObject.SitElement(currentLoc.x, currentLoc.x, currentItem.makeGraphicsItem()));
 				}
 			}
+		
+		if (stepCount % 15 == 0)
+		{
+			orders.add(Pizza.randomPizza());
+		}
 	}
 
 	private void stunPlayer(int playerNumber, int currentStep, Action[][] actions)

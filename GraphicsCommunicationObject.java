@@ -137,18 +137,27 @@ public class GraphicsCommunicationObject extends Server.OutgoingPacket
 	{
 		protected String type;
 
+		public GraphicsElement(String elementType)
+		{
+			type = elementType;
+		}
+	}
+	
+	public abstract static class LocatedGraphicsElement extends GraphicsElement
+	{
 		public int locationX;
 		public int locationY;
 
-		public GraphicsElement(String elementType, int x, int y)
+		public LocatedGraphicsElement(String elementType, int x, int y)
 		{
-			type = elementType;
+			super(elementType);
+
 			locationX = x;
 			locationY = y;
 		}
 	}
 
-	public abstract static class PlayerGraphicsElement extends GraphicsElement
+	public abstract static class PlayerGraphicsElement extends LocatedGraphicsElement
 	{
 		public Item held;
 		public int player;
@@ -252,7 +261,7 @@ public class GraphicsCommunicationObject extends Server.OutgoingPacket
 		}
 	}
 
-	public static class FlyElement extends GraphicsElement
+	public static class FlyElement extends LocatedGraphicsElement
 	{
 		public Engine.Direction direction;
 		public int distance;
@@ -267,7 +276,7 @@ public class GraphicsCommunicationObject extends Server.OutgoingPacket
 		}
 	}
 
-	public static class SitElement extends GraphicsElement
+	public static class SitElement extends LocatedGraphicsElement
 	{
 		public Item item;
 
@@ -275,6 +284,23 @@ public class GraphicsCommunicationObject extends Server.OutgoingPacket
 		{
 			super("sit", x, y);
 			item = sittingItem;
+		}
+	}
+	
+	public static class OrderElement extends GraphicsElement
+	{
+		public Pizza order;
+		
+		public OrderElement(Pizza p)
+		{
+			super("order");
+			
+			order = p;
+		}
+		
+		public OrderElement(Engine.Pizza p)
+		{
+			this(new Pizza(p));
 		}
 	}
 
