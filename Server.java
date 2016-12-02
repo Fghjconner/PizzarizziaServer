@@ -135,22 +135,26 @@ public class Server
 		return true;
 	}
 
-	private void startRound()
-	{
-		state = ServerState.IN_ROUND;
-
-		endOfRoundTimer.schedule(new EndRoundTask(), 15000);
-
-		for (int i = 0; i < getMaxPlayers(); i++)
-			sendPacketToPlayer(i, new RoundStartPacket(60));
-	}
-
 	public static enum ServerState
 	{
 		WAITING_TO_START, IN_ROUND, POST_ROUND
 	}
 
-	public class EndRoundTask extends TimerTask
+	private class StartRoundTask extends TimerTask
+	{
+		@Override
+		public void run()
+		{
+			state = ServerState.IN_ROUND;
+
+			endOfRoundTimer.schedule(new EndRoundTask(), 20000);
+
+			for (int i = 0; i < getMaxPlayers(); i++)
+				sendPacketToPlayer(i, new RoundStartPacket(20));
+		}
+	}
+
+	private class EndRoundTask extends TimerTask
 	{
 		@Override
 		public void run()
@@ -237,8 +241,11 @@ public class Server
 				{
 					sendPacketToPlayer(i, gco);
 				}
+				
+				for (int i = 0; i < 4; i++)
+					lastActions[i] = null;
 
-				startRound();
+				endOfRoundTimer.schedule(new StartRoundTask(), 4000);
 			}
 		}
 	}
@@ -267,7 +274,7 @@ public class Server
 				for (int i = 0; i < getMaxPlayers(); i++)
 					sendPacketToPlayer(i, packet);
 
-				startRound();
+				new StartRoundTask().run();
 			}
 		}
 

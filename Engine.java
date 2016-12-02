@@ -113,7 +113,7 @@ public class Engine
 			if (held == null)
 				return null;
 			else
-				return makeHeldGraphicsItem();
+				return held.makeGraphicsItem();
 		}
 	}
 
@@ -281,17 +281,21 @@ public class Engine
 		Player currentPlayer = players[playerNumber];
 		Location targetLoc = players[playerNumber].loc.getAdjacent(currentAction.direction);
 		
-		if (!isValidLocation(targetLoc))
-		{
-			System.out.println(targetLoc.x);
-			System.out.println(targetLoc.y);
-			return new GraphicsCommunicationObject.StandElement(playerNumber,  currentPlayer.loc.x, currentPlayer.loc.y, currentPlayer.makeHeldGraphicsItem());
-		}
+//		if (!isValidLocation(targetLoc))
+//		{
+//			System.out.println(targetLoc.x);
+//			System.out.println(targetLoc.y);
+//			return new GraphicsCommunicationObject.StandElement(playerNumber,  currentPlayer.loc.x, currentPlayer.loc.y, currentPlayer.makeHeldGraphicsItem());
+//		}
 
 		switch (currentAction.type)
 		{
 			case USE:
-				if (currentPlayer.held == null)
+				if (!isValidLocation(targetLoc))
+				{
+					return new GraphicsCommunicationObject.StandElement(playerNumber,  currentPlayer.loc.x, currentPlayer.loc.y, currentPlayer.makeHeldGraphicsItem());
+				}
+				else if (currentPlayer.held == null)
 				{
 					if (getItem(targetLoc) != null)
 					{
@@ -429,7 +433,7 @@ public class Engine
 				else
 					return null;
 			case MOVE:
-				if (getTile(targetLoc) == Tile.EMPTY)
+				if (isValidLocation(targetLoc) && getTile(targetLoc) == Tile.EMPTY)
 				{
 					GraphicsCommunicationObject.MoveElement graphicsElement = new GraphicsCommunicationObject.MoveElement(playerNumber, currentPlayer.loc.x, currentPlayer.loc.y, currentAction.direction, currentPlayer.makeHeldGraphicsItem());
 
@@ -471,7 +475,7 @@ public class Engine
 	//Preforms action independent updates to the world (eg. removing delivered pizzas, pizzas cooking, pizzas flying, player collisions)
 	private void updateWorld(int currentStep, Action[][] actions, GraphicsCommunicationObject graphics)
 	{
-		while (handleCollision(currentStep, actions[currentStep], graphics));
+		while (handleCollision(currentStep, actions, graphics));
 
 		for (int y = 0; y < map.length; y++)
 			for (int x = 0; x < map[0].length; x++)
@@ -535,12 +539,12 @@ public class Engine
 									currentPizza.cookedness++;
 								}
 	
-								graphics.add(currentStep, new GraphicsCommunicationObject.SitElement(currentLoc.x, currentLoc.x, currentItem.makeGraphicsItem()));
+								graphics.add(currentStep, new GraphicsCommunicationObject.SitElement(currentLoc.x, currentLoc.y, currentItem.makeGraphicsItem()));
 							}
 						}
 					}
 					else
-						graphics.add(currentStep, new GraphicsCommunicationObject.SitElement(currentLoc.x, currentLoc.x, currentItem.makeGraphicsItem()));
+						graphics.add(currentStep, new GraphicsCommunicationObject.SitElement(currentLoc.x, currentLoc.y, currentItem.makeGraphicsItem()));
 				}
 			}
 		
@@ -567,26 +571,34 @@ public class Engine
 
 	//Loops through players until it finds a collision, then resolves it. Returns true if a collision is found, false otherwise
 	//Should be called repeatedly until all collisions are resolved
-	private boolean handleCollision(int currentStep, Action[] actions, GraphicsCommunicationObject graphics)
+	private boolean handleCollision(int currentStep, Action[][] actions, GraphicsCommunicationObject graphics)
 	{
 		for (int playerNumber = 0; playerNumber < players.length; playerNumber++)
 			for (int otherPlayer = playerNumber + 1; otherPlayer < players.length; otherPlayer++)
 				if (players[playerNumber].loc.equals(players[otherPlayer].loc))
 				{
-					if (actions[playerNumber].type == ActionType.MOVE)
+					if (actions[playerNumber][currentStep].type == ActionType.MOVE)
 					{
-						players[playerNumber].loc = players[playerNumber].loc.getAdjacent(actions[playerNumber].direction.reverse());
+						players[playerNumber].loc = players[playerNumber].loc.getAdjacent(actions[playerNumber][currentStep].direction.reverse());
 
 						graphics.addCollision(currentStep, playerNumber, true);
 					}
+					else
+						graphics.addCollision(currentStep, playerNumber, false);
+					
+					stunPlayer(playerNumber, currentStep, actions);
 
-					if (actions[otherPlayer].type == ActionType.MOVE)
+					if (actions[otherPlayer][currentStep].type == ActionType.MOVE)
 					{
-						players[otherPlayer].loc = players[otherPlayer].loc.getAdjacent(actions[otherPlayer].direction.reverse());
+						players[otherPlayer].loc = players[otherPlayer].loc.getAdjacent(actions[otherPlayer][currentStep].direction.reverse());
 
 						graphics.addCollision(currentStep, otherPlayer, true);
 					}
+					else
+						graphics.addCollision(currentStep, otherPlayer, false);
 
+					stunPlayer(otherPlayer, currentStep, actions);
+					
 					return true;
 				}
 

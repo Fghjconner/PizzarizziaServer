@@ -92,6 +92,12 @@ public class GraphicsCommunicationObject extends Server.OutgoingPacket
 	{
 		public enum CookedState {RAW, COOKED, BURNT}
 
+		public boolean sauce = false;
+		public boolean cheese = false;
+		public boolean meat = false;
+		public boolean vegetables = false;
+		public CookedState cooked = CookedState.RAW;
+
 		public Pizza()
 		{
 			type = "pizza";
@@ -99,6 +105,8 @@ public class GraphicsCommunicationObject extends Server.OutgoingPacket
 
 		public Pizza(Engine.Pizza pizza)
 		{
+			this();
+			
 			sauce = pizza.sauce;
 			cheese = pizza.cheese;
 			meat = pizza.meat;
@@ -106,12 +114,6 @@ public class GraphicsCommunicationObject extends Server.OutgoingPacket
 
 			cooked = pizza.isBurnt() ? CookedState.BURNT : (pizza.isCooked() ? CookedState.COOKED : CookedState.RAW);
 		}
-
-		public boolean sauce = false;
-		public boolean cheese = false;
-		public boolean meat = false;
-		public boolean vegetables = false;
-		public CookedState cooked = CookedState.RAW;
 	}
 
 	public static class Meat extends Item
@@ -228,9 +230,6 @@ public class GraphicsCommunicationObject extends Server.OutgoingPacket
 	public static class PickUpElement extends PlayerGraphicsElement
 	{
 		public Engine.Direction direction;
-		public Item held;
-		public int player;
-		public boolean stunnedAfter;
 
 		public PickUpElement(int playerNumber, int x, int y, Engine.Direction dir, Item heldItem)
 		{
@@ -345,7 +344,7 @@ public class GraphicsCommunicationObject extends Server.OutgoingPacket
 				if (element instanceof MoveElement && knockback)
 				{
 					MoveElement moveElement = (MoveElement) element;
-					data.get(step).set(elementNumber, new CollideElement(moveElement.player, moveElement.locationX, moveElement.locationX, moveElement.direction, moveElement.held));
+					data.get(step).set(elementNumber, new CollideElement(moveElement.player, moveElement.locationX, moveElement.locationY, moveElement.direction, moveElement.held));
 				}
 				else
 					((PlayerGraphicsElement) element).stunnedAfter = true;
