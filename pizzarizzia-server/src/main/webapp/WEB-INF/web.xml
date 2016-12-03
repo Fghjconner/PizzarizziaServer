@@ -9,7 +9,7 @@
     <description>
       Pizzarizzia Game Server
     </description>
-    <display-name>Panic at the Pizzarizzia</display-name>
+    <display-name>Pizzarizzia Game Server</display-name>
 
     <welcome-file-list>
         <welcome-file>index.html</welcome-file>
